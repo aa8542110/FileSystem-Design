@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build:*)",
+      "Bash(dotnet run)",
+      "Bash(npm create:*)",
+      "Bash(npm install)",
+      "Bash(npm install:*)",
+      "Bash(npm run dev:*)",
+      "Bash(curl:*)",
+      "Bash(taskkill /F /PID 35336)",
+      "Bash(powershell -Command \"Stop-Process -Id 35336 -Force\")",
+      "Bash(dotnet --list-sdks:*)",
+      "Bash(dotnet run:*)"
+    ]
+  }
+}
