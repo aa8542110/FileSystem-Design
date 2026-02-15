@@ -8,12 +8,12 @@ namespace WinbondProj.Controllers;
 [Route("api/[controller]")]
 public class FileSystemController : ControllerBase
 {
-    private readonly IFileSystemService _service;
+    private readonly IFileSystemService _fileSystemService;
     private readonly ILogger<FileSystemController> _logger;
 
-    public FileSystemController(IFileSystemService service, ILogger<FileSystemController> logger)
+    public FileSystemController(IFileSystemService fileSystemService, ILogger<FileSystemController> logger)
     {
-        _service = service;
+        _fileSystemService = fileSystemService;
         _logger = logger;
     }
 
@@ -23,7 +23,7 @@ public class FileSystemController : ControllerBase
     [HttpGet("tree")]
     public async Task<ActionResult<FileSystemItemDto>> GetTree()
     {
-        var tree = await _service.GetTreeAsync();
+        var tree = await _fileSystemService.GetTreeAsync();
         if (tree == null)
         {
             return NotFound("找不到根目錄");
@@ -37,7 +37,7 @@ public class FileSystemController : ControllerBase
     [HttpGet("{id}")]
     public async Task<ActionResult> GetById(Guid id)
     {
-        var item = await _service.GetByIdAsync(id);
+        var item = await _fileSystemService.GetByIdAsync(id);
         if (item == null)
         {
             return NotFound($"找不到 ID 為 {id} 的項目");
@@ -51,14 +51,14 @@ public class FileSystemController : ControllerBase
     [HttpGet("{id}/size")]
     public async Task<ActionResult<object>> GetTotalSize(Guid id)
     {
-        var item = await _service.GetByIdAsync(id);
+        var item = await _fileSystemService.GetByIdAsync(id);
         if (item == null)
         {
             return NotFound($"找不到 ID 為 {id} 的項目");
         }
 
-        var totalSize = await _service.GetTotalSizeAsync(id);
-        var log = await _service.GetTraverseLogAsync(id, "CalculateSize");
+        var totalSize = await _fileSystemService.GetTotalSizeAsync(id);
+        var log = await _fileSystemService.GetTraverseLogAsync(id, "CalculateSize");
 
         return Ok(new
         {
@@ -87,7 +87,7 @@ public class FileSystemController : ControllerBase
             ext = "." + ext;
         }
 
-        var result = await _service.SearchByExtensionAsync(ext);
+        var result = await _fileSystemService.SearchByExtensionAsync(ext);
         return Ok(result);
     }
 
@@ -97,13 +97,13 @@ public class FileSystemController : ControllerBase
     [HttpGet("{id}/xml")]
     public async Task<ActionResult<string>> GetXml(Guid id)
     {
-        var item = await _service.GetByIdAsync(id);
+        var item = await _fileSystemService.GetByIdAsync(id);
         if (item == null)
         {
             return NotFound($"找不到 ID 為 {id} 的項目");
         }
 
-        var xml = await _service.GetXmlAsync(id);
+        var xml = await _fileSystemService.GetXmlAsync(id);
         return Content(xml, "application/xml");
     }
 
@@ -113,13 +113,13 @@ public class FileSystemController : ControllerBase
     [HttpGet("{id}/traverse-log")]
     public async Task<ActionResult<TraverseLogDto>> GetTraverseLog(Guid id, [FromQuery] string operation = "Traverse")
     {
-        var item = await _service.GetByIdAsync(id);
+        var item = await _fileSystemService.GetByIdAsync(id);
         if (item == null)
         {
             return NotFound($"找不到 ID 為 {id} 的項目");
         }
 
-        var log = await _service.GetTraverseLogAsync(id, operation);
+        var log = await _fileSystemService.GetTraverseLogAsync(id, operation);
         return Ok(log);
     }
 
@@ -129,7 +129,7 @@ public class FileSystemController : ControllerBase
     [HttpGet("console")]
     public ActionResult<object> GetConsoleOutput()
     {
-        var output = _service.GetConsoleOutput();
+        var output = _fileSystemService.GetConsoleOutput();
         return Ok(new { Output = output });
     }
 
@@ -141,7 +141,7 @@ public class FileSystemController : ControllerBase
     {
         try
         {
-            var directory = await _service.CreateDirectoryAsync(dto);
+            var directory = await _fileSystemService.CreateDirectoryAsync(dto);
             return CreatedAtAction(nameof(GetById), new { id = directory.Id }, directory);
         }
         catch (Exception ex)
@@ -159,7 +159,7 @@ public class FileSystemController : ControllerBase
     {
         try
         {
-            var file = await _service.CreateFileAsync(dto);
+            var file = await _fileSystemService.CreateFileAsync(dto);
             return CreatedAtAction(nameof(GetById), new { id = file.Id }, file);
         }
         catch (Exception ex)
@@ -177,7 +177,7 @@ public class FileSystemController : ControllerBase
     {
         try
         {
-            var item = await _service.RenameAsync(id, dto.NewName);
+            var item = await _fileSystemService.RenameAsync(id, dto.NewName);
             return Ok(item);
         }
         catch (KeyNotFoundException ex)
@@ -197,7 +197,7 @@ public class FileSystemController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<ActionResult> Delete(Guid id)
     {
-        var success = await _service.DeleteAsync(id);
+        var success = await _fileSystemService.DeleteAsync(id);
         if (!success)
         {
             return NotFound($"找不到 ID 為 {id} 的項目");

@@ -10,13 +10,6 @@
       <!-- 左側：檔案樹 -->
       <div class="left-panel">
         <div class="toolbar">
-          <el-button type="primary" size="small" @click="showCreateDialog('directory')">
-            📁 新增
-          </el-button>
-          <el-button size="small" @click="showCreateDialog('file')">
-            📄 貼上
-          </el-button>
-          <el-divider direction="vertical" />
           <el-button size="small" type="warning" @click="exportXmlStructure">
             📄 匯出 XML
           </el-button>
@@ -42,6 +35,13 @@
 
       <!-- 中間：訪問者操作與監控 -->
       <div class="middle-panel">
+        <ItemInfo
+          :selected-node="selectedNode"
+          @delete="deleteNode"
+          @create-directory="showCreateDialog('directory')"
+          @create-file="showCreateDialog('file')"
+        />
+
         <VisitorOperations
           :selected-node="selectedNode"
           :search-extension="searchExtension"
@@ -53,11 +53,6 @@
           :current-node="currentProcessingNode"
           :processed-nodes="processedNodes"
           :total-nodes="totalNodes"
-        />
-
-        <ItemInfo
-          :selected-node="selectedNode"
-          @delete="deleteNode"
         />
       </div>
 
@@ -157,6 +152,15 @@ const loadTree = async () => {
     const response = await filesystemApi.getTree()
     treeData.value = response.data
     highlightedFileIds.value = []  // 清除高亮
+
+    // 在 Console 面板輸出樹狀結構
+    const consoleRes = await filesystemApi.getConsoleOutput()
+    if (consoleRes.data?.output) {
+      traverseLogs.value = consoleRes.data.output.split('\n').filter(line => line.trim() !== '')
+      totalNodes.value = traverseLogs.value.length
+      processedNodes.value = traverseLogs.value.length
+    }
+
     ElMessage.success('目錄樹載入成功')
   } catch (error) {
     console.error('載入目錄樹失敗:', error)
@@ -371,16 +375,29 @@ const handleCreate = async (formData) => {
         parentId: formData.parentId
       })
     } else {
-      await filesystemApi.createFile({
+      // 根據檔案類型組裝對應的 DTO（Factory Pattern - 前端帶 $type discriminator）
+      const payload = {
+        $type: formData.fileType,  // "word" | "image" | "text"
         name: formData.name,
         size: formData.size,
-        parentId: formData.parentId,
-        fileType: formData.fileType,
-        pages: formData.pages,
-        width: formData.width,
-        height: formData.height,
-        encoding: formData.encoding
-      })
+        parentId: formData.parentId
+      }
+
+      // 依類型附加專屬屬性
+      switch (formData.fileType) {
+        case 'word':
+          payload.pages = formData.pages
+          break
+        case 'image':
+          payload.width = formData.width
+          payload.height = formData.height
+          break
+        case 'text':
+          payload.encoding = formData.encoding
+          break
+      }
+
+      await filesystemApi.createFile(payload)
     }
 
     ElMessage.success('建立成功')
@@ -448,7 +465,7 @@ onMounted(() => {
 .main-content {
   flex: 1;
   display: grid;
-  grid-template-columns: 350px 400px 1fr;
+  grid-template-columns: 450px 1fr 400px;
   gap: 15px;
   padding: 15px;
   overflow: hidden;

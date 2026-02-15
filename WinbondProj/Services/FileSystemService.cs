@@ -10,10 +10,12 @@ namespace WinbondProj.Services;
 public class FileSystemService : IFileSystemService
 {
     private readonly AppDbContext _context;
+    private readonly FileFactory _fileFactory;
 
-    public FileSystemService(AppDbContext context)
+    public FileSystemService(AppDbContext context, FileFactory fileFactory)
     {
         _context = context;
+        _fileFactory = fileFactory;
     }
 
     public async Task<FileSystemItemDto?> GetTreeAsync()
@@ -147,35 +149,7 @@ public class FileSystemService : IFileSystemService
 
     public async Task<FileSystemItem> CreateFileAsync(CreateFileDto dto)
     {
-        FileSystemItem file = dto.FileType.ToLower() switch
-        {
-            "word" => new WordFile
-            {
-                Name = dto.Name,
-                Size = dto.Size,
-                Pages = dto.Pages ?? 0,
-                ParentId = dto.ParentId,
-                CreatedDate = DateTime.Now
-            },
-            "image" => new ImageFile
-            {
-                Name = dto.Name,
-                Size = dto.Size,
-                Width = dto.Width ?? 0,
-                Height = dto.Height ?? 0,
-                ParentId = dto.ParentId,
-                CreatedDate = DateTime.Now
-            },
-            "text" => new TextFile
-            {
-                Name = dto.Name,
-                Size = dto.Size,
-                Encoding = dto.Encoding ?? "UTF-8",
-                ParentId = dto.ParentId,
-                CreatedDate = DateTime.Now
-            },
-            _ => throw new ArgumentException("不支援的檔案類型")
-        };
+        var file = _fileFactory.Create(dto);
 
         _context.FileSystemItems.Add(file);
         await _context.SaveChangesAsync();

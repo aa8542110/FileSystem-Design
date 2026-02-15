@@ -17,6 +17,7 @@ public class Program
             options.UseSqlite("Data Source=filesystem.db"));
 
         // 註冊服務
+        builder.Services.AddSingleton<WinbondProj.Services.FileFactory>();
         builder.Services.AddScoped<WinbondProj.Services.IFileSystemService, WinbondProj.Services.FileSystemService>();
 
         // 配置 CORS (允許 Vue 前端存取)

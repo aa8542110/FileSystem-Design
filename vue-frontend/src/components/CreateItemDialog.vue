@@ -15,9 +15,11 @@
           <el-option
             v-for="dir in directories"
             :key="dir.id"
-            :label="dir.path"
+            :label="dir.name"
             :value="dir.id"
-          />
+          >
+            <span :title="dir.path">{{ dir.name }}</span>
+          </el-option>
         </el-select>
       </el-form-item>
 
