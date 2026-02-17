@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using WinbondProj.Models;
 using Directory = WinbondProj.Models.Directory;
 
@@ -113,6 +114,16 @@ public static class DbInitializer
         root.Items.Add(projectDocs);
         root.Items.Add(personalNotes);
         root.Items.Add(readme);
+
+        // Seed 固定標籤
+        if (!context.Tags.Any())
+        {
+            context.Tags.AddRange(
+                new Tag { Id = Guid.Parse("00000000-0000-0000-0000-000000000001"), Name = "Urgent", Color = "#F56C6C" },
+                new Tag { Id = Guid.Parse("00000000-0000-0000-0000-000000000002"), Name = "Work", Color = "#409EFF" },
+                new Tag { Id = Guid.Parse("00000000-0000-0000-0000-000000000003"), Name = "Personal", Color = "#67C23A" }
+            );
+        }
 
         // 儲存到資料庫
         context.FileSystemItems.Add(root);

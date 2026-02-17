@@ -21,6 +21,9 @@ public class FileSystemItemDto
     // 目錄專用
     public List<FileSystemItemDto>? Items { get; set; }
 
+    // 標籤
+    public List<TagDto>? Tags { get; set; }
+
     // 額外資訊
     public double TotalSize { get; set; } // 遞迴計算的總大小
     public string Extension { get; set; } = string.Empty;

@@ -16,6 +16,18 @@
         <span class="custom-tree-node" :class="{ 'highlighted-node': isHighlighted(data.id) }">
           <span class="node-icon">{{ getIcon(data.itemType) }}</span>
           <span class="node-label">{{ data.name }}</span>
+          <span v-if="data.tags && data.tags.length" class="tag-badges">
+            <el-tag
+              v-for="tag in data.tags"
+              :key="tag.id"
+              :color="tag.color"
+              size="small"
+              effect="dark"
+              class="tag-badge"
+            >
+              {{ tag.name }}
+            </el-tag>
+          </span>
           <span class="node-info">{{ getNodeInfo(data) }}</span>
         </span>
       </template>
@@ -96,6 +108,22 @@ const isHighlighted = (nodeId) => {
 
 .node-label {
   font-weight: 500;
+}
+
+.tag-badges {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 6px;
+}
+
+.tag-badge {
+  border: none !important;
+  color: #fff !important;
+  font-size: 11px !important;
+  height: 20px !important;
+  line-height: 20px !important;
+  padding: 0 6px !important;
+  border-radius: 4px !important;
 }
 
 .node-info {

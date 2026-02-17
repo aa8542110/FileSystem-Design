@@ -204,4 +204,31 @@ public class FileSystemController : ControllerBase
         }
         return NoContent();
     }
+
+    /// <summary>
+    /// 取得所有標籤
+    /// </summary>
+    [HttpGet("tags")]
+    public async Task<ActionResult> GetAllTags()
+    {
+        var tags = await _fileSystemService.GetAllTagsAsync();
+        return Ok(tags);
+    }
+
+    /// <summary>
+    /// 切換項目標籤（有就移除，沒有就加上）
+    /// </summary>
+    [HttpPost("{id}/tags/{tagId}")]
+    public async Task<ActionResult> ToggleTag(Guid id, Guid tagId)
+    {
+        try
+        {
+            await _fileSystemService.ToggleTagAsync(id, tagId);
+            return Ok();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(ex.Message);
+        }
+    }
 }

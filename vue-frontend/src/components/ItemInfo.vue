@@ -32,7 +32,21 @@
         </el-descriptions-item>
       </el-descriptions>
 
-      <!-- 目錄操作移到 header -->
+      <!-- 標籤管理 -->
+      <div v-if="allTags && allTags.length" class="tag-section">
+        <span class="tag-label">標籤：</span>
+        <el-tag
+          v-for="tag in allTags"
+          :key="tag.id"
+          :color="isTagActive(tag.id) ? tag.color : ''"
+          :effect="isTagActive(tag.id) ? 'dark' : 'plain'"
+          :style="!isTagActive(tag.id) ? { borderColor: tag.color, color: tag.color } : { borderColor: tag.color }"
+          class="tag-toggle"
+          @click="$emit('toggle-tag', selectedNode.id, tag.id)"
+        >
+          {{ tag.name }}
+        </el-tag>
+      </div>
     </template>
 
     <template v-else>
@@ -48,10 +62,32 @@ const props = defineProps({
   selectedNode: {
     type: Object,
     default: null
+  },
+  allTags: {
+    type: Array,
+    default: () => []
   }
 })
 
-const emit = defineEmits(['delete', 'create-directory', 'create-file'])
+const emit = defineEmits(['delete', 'create-directory', 'create-file', 'toggle-tag'])
+
+const isTagActive = (tagId) => {
+  return props.selectedNode?.tags?.some(t => t.id === tagId) || false
+}
+
+const tagStyle = (tag, active) => {
+  if (active) {
+    return {
+      backgroundColor: tag.color,
+      borderColor: tag.color,
+      color: '#fff'
+    }
+  }
+  return {
+    borderColor: tag.color,
+    color: tag.color
+  }
+}
 
 const formatDate = (dateString) => {
   return new Date(dateString).toLocaleString('zh-TW')
@@ -102,5 +138,22 @@ const getDisplaySize = (node) => {
 .actions-label {
   font-size: 13px;
   color: #606266;
+}
+
+.tag-section {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tag-label {
+  font-size: 13px;
+  color: #606266;
+  white-space: nowrap;
+}
+
+.tag-toggle {
+  cursor: pointer;
 }
 </style>

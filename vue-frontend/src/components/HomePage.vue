@@ -10,10 +10,6 @@
       <!-- 左側：檔案樹 -->
       <div class="left-panel">
         <div class="toolbar">
-          <el-button size="small" type="warning" @click="exportXmlStructure">
-            📄 匯出 XML
-          </el-button>
-          <el-divider direction="vertical" />
           <el-button size="small" @click="showSortMenu = !showSortMenu">
             名稱 ▼
           </el-button>
@@ -37,9 +33,11 @@
       <div class="middle-panel">
         <ItemInfo
           :selected-node="selectedNode"
+          :all-tags="allTags"
           @delete="deleteNode"
           @create-directory="showCreateDialog('directory')"
           @create-file="showCreateDialog('file')"
+          @toggle-tag="handleToggleTag"
         />
 
         <VisitorOperations
@@ -47,13 +45,9 @@
           :search-extension="searchExtension"
           @calculate-size="calculateSize"
           @search="handleSearch"
+          @export-xml="exportXmlStructure"
         />
 
-        <ObserverPanel
-          :current-node="currentProcessingNode"
-          :processed-nodes="processedNodes"
-          :total-nodes="totalNodes"
-        />
       </div>
 
       <!-- 右側：Console 面板 -->
@@ -67,6 +61,13 @@
         />
       </div>
     </div>
+
+    <!-- 右下角懸浮監控面板 -->
+    <ObserverPanel
+      :current-node="currentProcessingNode"
+      :processed-nodes="processedNodes"
+      :total-nodes="totalNodes"
+    />
 
     <!-- 新增/編輯對話框 -->
     <CreateItemDialog
@@ -98,6 +99,7 @@ const currentProcessingNode = ref('')
 const processedNodes = ref(0)
 const totalNodes = ref(0)
 const searchExtension = ref('.docx')
+const allTags = ref([])
 const showSortMenu = ref(false)
 const createDialogVisible = ref(false)
 const createForm = ref({
@@ -145,6 +147,41 @@ const collectDirectories = (node, path = '') => {
 const availableDirectories = computed(() => {
   return collectDirectories(treeData.value)
 })
+
+// 載入所有標籤
+const loadTags = async () => {
+  try {
+    const response = await filesystemApi.getAllTags()
+    allTags.value = response.data
+  } catch (error) {
+    console.error('載入標籤失敗:', error)
+  }
+}
+
+// 切換標籤
+const handleToggleTag = async (itemId, tagId) => {
+  try {
+    await filesystemApi.toggleTag(itemId, tagId)
+    await loadTree()
+    // 重新選取同一節點以更新 ItemInfo 顯示
+    if (selectedNode.value) {
+      const findNode = (node, id) => {
+        if (node.id === id) return node
+        if (node.items) {
+          for (const child of node.items) {
+            const found = findNode(child, id)
+            if (found) return found
+          }
+        }
+        return null
+      }
+      selectedNode.value = findNode(treeData.value, itemId)
+    }
+  } catch (error) {
+    console.error('切換標籤失敗:', error)
+    ElMessage.error('切換標籤失敗')
+  }
+}
 
 // 載入目錄樹
 const loadTree = async () => {
@@ -437,6 +474,7 @@ const deleteNode = async () => {
 
 // 初始化
 onMounted(() => {
+  loadTags()
   loadTree()
 })
 </script>

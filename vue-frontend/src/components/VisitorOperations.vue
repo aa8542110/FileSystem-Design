@@ -7,42 +7,35 @@
     </template>
 
     <!-- 計算大小 -->
-    <div class="operation-section">
-      <div class="operation-header">
-        <h4>計算大小</h4>
-        <el-button
-          type="primary"
-          size="small"
-          @click="$emit('calculate-size')"
-          :disabled="!selectedNode || selectedNode.itemType !== 'Directory'"
-        >
-          執行
-        </el-button>
-      </div>
-    </div>
+    <el-button
+      class="operation-btn"
+      type="primary"
+      @click="$emit('calculate-size')"
+      :disabled="!selectedNode || selectedNode.itemType !== 'Directory'"
+    >
+      📊 計算目錄總大小
+    </el-button>
 
-    <el-divider />
+    <!-- 匯出 XML -->
+    <el-button
+      class="operation-btn"
+      type="warning"
+      @click="$emit('export-xml')"
+    >
+      📄 匯出 XML 結構
+    </el-button>
 
-    <!-- 搜尋功能 -->
-    <div class="operation-section">
-      <div class="operation-header">
-        <h4>副檔名搜尋</h4>
-      </div>
+    <!-- 副檔名搜尋 -->
+    <div class="search-section">
       <el-input
         v-model="localSearchExtension"
         placeholder=".docx"
-        size="small"
+        size="default"
         @keyup.enter="handleSearch"
       >
-        <template #suffix>
-          <el-button
-            type="primary"
-            size="small"
-            text
-            @click="handleSearch"
-          >
-            搜尋 🔍
-          </el-button>
+        <template #prepend>🔍 副檔名搜尋</template>
+        <template #append>
+          <el-button @click="handleSearch">搜尋</el-button>
         </template>
       </el-input>
     </div>
@@ -63,7 +56,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['calculate-size', 'search'])
+const emit = defineEmits(['calculate-size', 'search', 'export-xml'])
 
 const localSearchExtension = ref(props.searchExtension)
 
@@ -84,20 +77,13 @@ const handleSearch = () => {
   font-weight: bold;
 }
 
-.operation-section {
-  margin-bottom: 15px;
-}
-
-.operation-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.operation-btn {
+  width: 100%;
   margin-bottom: 10px;
+  margin-left: 0;
 }
 
-.operation-header h4 {
-  margin: 0;
-  font-size: 14px;
-  color: #606266;
+.search-section {
+  margin-top: 2px;
 }
 </style>

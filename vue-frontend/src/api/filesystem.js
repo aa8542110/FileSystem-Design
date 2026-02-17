@@ -67,5 +67,15 @@ export default {
   // 刪除項目
   delete(id) {
     return apiClient.delete(`/${id}`)
+  },
+
+  // 取得所有標籤
+  getAllTags() {
+    return apiClient.get('/tags')
+  },
+
+  // 切換標籤
+  toggleTag(itemId, tagId) {
+    return apiClient.post(`/${itemId}/tags/${tagId}`)
   }
 }

@@ -15,6 +15,7 @@ public abstract class FileSystemItem
 
     // 導航屬性
     public Directory? Parent { get; set; }
+    public List<Tag> Tags { get; set; } = new();
 
     protected FileSystemItem()
     {

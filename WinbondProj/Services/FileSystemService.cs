@@ -35,6 +35,11 @@ public class FileSystemService : IFileSystemService
 
     private async Task LoadChildrenRecursiveAsync(FileSystemItem item)
     {
+        // 載入標籤
+        await _context.Entry(item)
+            .Collection(i => i.Tags)
+            .LoadAsync();
+
         if (item is Directory directory)
         {
             // 載入當前目錄的所有子項目
@@ -200,6 +205,35 @@ public class FileSystemService : IFileSystemService
         }
     }
 
+    public async Task<List<TagDto>> GetAllTagsAsync()
+    {
+        return await _context.Tags
+            .Select(t => new TagDto { Id = t.Id, Name = t.Name, Color = t.Color })
+            .ToListAsync();
+    }
+
+    public async Task ToggleTagAsync(Guid itemId, Guid tagId)
+    {
+        var item = await _context.FileSystemItems
+            .Include(i => i.Tags)
+            .FirstOrDefaultAsync(i => i.Id == itemId);
+
+        if (item == null)
+            throw new KeyNotFoundException("找不到指定的項目");
+
+        var tag = await _context.Tags.FindAsync(tagId);
+        if (tag == null)
+            throw new KeyNotFoundException("找不到指定的標籤");
+
+        var existing = item.Tags.FirstOrDefault(t => t.Id == tagId);
+        if (existing != null)
+            item.Tags.Remove(existing);
+        else
+            item.Tags.Add(tag);
+
+        await _context.SaveChangesAsync();
+    }
+
     private FileSystemItemDto MapToDto(FileSystemItem item)
     {
         var dto = new FileSystemItemDto
@@ -210,7 +244,13 @@ public class FileSystemService : IFileSystemService
             CreatedDate = item.CreatedDate,
             ParentId = item.ParentId,
             TotalSize = item.GetTotalSize(),
-            Extension = item.GetExtension()
+            Extension = item.GetExtension(),
+            Tags = item.Tags.Select(t => new TagDto
+            {
+                Id = t.Id,
+                Name = t.Name,
+                Color = t.Color
+            }).ToList()
         };
 
         switch (item)

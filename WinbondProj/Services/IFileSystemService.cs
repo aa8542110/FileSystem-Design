@@ -23,4 +23,8 @@ public interface IFileSystemService
 
     // 刪除
     Task<bool> DeleteAsync(Guid id);
+
+    // 標籤
+    Task<List<TagDto>> GetAllTagsAsync();
+    Task ToggleTagAsync(Guid itemId, Guid tagId);
 }

@@ -17,6 +17,7 @@ public class AppDbContext : DbContext
     public DbSet<WordFile> WordFiles { get; set; }
     public DbSet<ImageFile> ImageFiles { get; set; }
     public DbSet<TextFile> TextFiles { get; set; }
+    public DbSet<Tag> Tags { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -36,6 +37,12 @@ public class AppDbContext : DbContext
             .WithOne(i => i.Parent)
             .HasForeignKey(i => i.ParentId)
             .OnDelete(DeleteBehavior.Restrict); // 防止循環刪除
+
+        // 多對多：FileSystemItem <-> Tag
+        modelBuilder.Entity<FileSystemItem>()
+            .HasMany(i => i.Tags)
+            .WithMany()
+            .UsingEntity("FileSystemItemTags");
 
         // 索引優化
         modelBuilder.Entity<FileSystemItem>()
