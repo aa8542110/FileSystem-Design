@@ -10,18 +10,44 @@
       <!-- 左側：檔案樹 -->
       <div class="left-panel">
         <div class="toolbar">
-          <el-button size="small" @click="showSortMenu = !showSortMenu">
-            名稱 ▼
+          <el-button
+            size="small"
+            :type="sortField === 'name' ? 'primary' : ''"
+            @click="toggleSort('name')"
+          >
+            名稱 {{ sortField === 'name' ? (sortOrder === 'asc' ? '↑' : '↓') : '' }}
           </el-button>
-          <el-button size="small">大小</el-button>
-          <el-button size="small">類型</el-button>
-          <el-button size="small">排序</el-button>
+          <el-button
+            size="small"
+            :type="sortField === 'size' ? 'primary' : ''"
+            @click="toggleSort('size')"
+          >
+            大小 {{ sortField === 'size' ? (sortOrder === 'asc' ? '↑' : '↓') : '' }}
+          </el-button>
+          <el-button
+            size="small"
+            :type="sortField === 'extension' ? 'primary' : ''"
+            @click="toggleSort('extension')"
+          >
+            副檔名 {{ sortField === 'extension' ? (sortOrder === 'asc' ? '↑' : '↓') : '' }}
+          </el-button>
+          <el-divider direction="vertical" />
+          <el-tooltip :content="'復原: ' + undoLabel" :disabled="!canUndo" placement="bottom">
+            <el-button size="small" :disabled="!canUndo" @click="handleUndo">
+              ↩ 復原
+            </el-button>
+          </el-tooltip>
+          <el-tooltip :content="'重做: ' + redoLabel" :disabled="!canRedo" placement="bottom">
+            <el-button size="small" :disabled="!canRedo" @click="handleRedo">
+              ↪ 重做
+            </el-button>
+          </el-tooltip>
         </div>
 
         <div class="tree-section">
           <h3>📦 檔案階層 (Composite)</h3>
           <FileTree
-            :tree-data="treeData"
+            :tree-data="sortedTreeData"
             :highlighted-ids="highlightedFileIds"
             @node-click="handleNodeClick"
             @refresh="loadTree"
@@ -81,7 +107,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import FileTree from './FileTree.vue'
 import VisitorOperations from './VisitorOperations.vue'
@@ -90,6 +116,9 @@ import ItemInfo from './ItemInfo.vue'
 import ConsolePanel from './ConsolePanel.vue'
 import CreateItemDialog from './CreateItemDialog.vue'
 import filesystemApi from '../api/filesystem'
+import { useUndoRedo } from '../composables/useUndoRedo'
+
+const { canUndo, canRedo, undoLabel, redoLabel, executeCommand, undo, redo } = useUndoRedo()
 
 // State
 const treeData = ref(null)
@@ -100,7 +129,8 @@ const processedNodes = ref(0)
 const totalNodes = ref(0)
 const searchExtension = ref('.docx')
 const allTags = ref([])
-const showSortMenu = ref(false)
+const sortField = ref('name')
+const sortOrder = ref('asc')
 const createDialogVisible = ref(false)
 const createForm = ref({
   type: 'directory',
@@ -115,6 +145,56 @@ const createForm = ref({
 })
 
 const rootId = computed(() => treeData.value?.id || null)
+
+// 排序切換
+const toggleSort = (field) => {
+  if (sortField.value === field) {
+    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortField.value = field
+    sortOrder.value = 'asc'
+  }
+}
+
+// 取得副檔名（從檔名中提取 '.' 之後的部分）
+const getExtension = (name) => {
+  const dotIndex = name.lastIndexOf('.')
+  return dotIndex > 0 ? name.substring(dotIndex + 1).toLowerCase() : ''
+}
+
+// 遞迴排序樹狀資料
+const sortTreeNode = (node) => {
+  if (!node) return node
+  const clone = { ...node }
+  if (clone.items && clone.items.length > 0) {
+    clone.items = clone.items.map(child => sortTreeNode(child))
+    clone.items.sort((a, b) => {
+      // 目錄優先排在檔案前面
+      const aIsDir = a.itemType === 'Directory' ? 0 : 1
+      const bIsDir = b.itemType === 'Directory' ? 0 : 1
+      if (aIsDir !== bIsDir) return aIsDir - bIsDir
+
+      let cmp = 0
+      switch (sortField.value) {
+        case 'name':
+          cmp = a.name.localeCompare(b.name)
+          break
+        case 'size':
+          cmp = (a.size || 0) - (b.size || 0)
+          break
+        case 'extension':
+          cmp = getExtension(a.name).localeCompare(getExtension(b.name))
+          break
+      }
+      return sortOrder.value === 'asc' ? cmp : -cmp
+    })
+  }
+  return clone
+}
+
+const sortedTreeData = computed(() => {
+  return sortTreeNode(treeData.value)
+})
 
 // 收集所有目錄（遞迴）
 const collectDirectories = (node, path = '') => {
@@ -158,25 +238,47 @@ const loadTags = async () => {
   }
 }
 
-// 切換標籤
+// 在樹中尋找節點
+const findNode = (node, id) => {
+  if (!node) return null
+  if (node.id === id) return node
+  if (node.items) {
+    for (const child of node.items) {
+      const found = findNode(child, id)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+// 重新載入樹後選回指定節點（或根目錄）
+const reloadAndSelect = async (nodeId) => {
+  await loadTree(false)
+  if (nodeId) {
+    const node = findNode(treeData.value, nodeId)
+    if (node) {
+      selectedNode.value = node
+      return
+    }
+  }
+  selectedNode.value = treeData.value
+}
+
+// 切換標籤（Command Pattern）
 const handleToggleTag = async (itemId, tagId) => {
   try {
-    await filesystemApi.toggleTag(itemId, tagId)
-    await loadTree()
-    // 重新選取同一節點以更新 ItemInfo 顯示
-    if (selectedNode.value) {
-      const findNode = (node, id) => {
-        if (node.id === id) return node
-        if (node.items) {
-          for (const child of node.items) {
-            const found = findNode(child, id)
-            if (found) return found
-          }
-        }
-        return null
+    await executeCommand({
+      label: '切換標籤',
+      execute: async () => {
+        await filesystemApi.toggleTag(itemId, tagId)
+        await reloadAndSelect(itemId)
+      },
+      undo: async () => {
+        await filesystemApi.toggleTag(itemId, tagId)
+        await reloadAndSelect(itemId)
       }
-      selectedNode.value = findNode(treeData.value, itemId)
-    }
+    })
+    ElMessage.success('標籤已切換')
   } catch (error) {
     console.error('切換標籤失敗:', error)
     ElMessage.error('切換標籤失敗')
@@ -184,11 +286,17 @@ const handleToggleTag = async (itemId, tagId) => {
 }
 
 // 載入目錄樹
-const loadTree = async () => {
+const loadTree = async (showMessage = true) => {
   try {
     const response = await filesystemApi.getTree()
     treeData.value = response.data
     highlightedFileIds.value = []  // 清除高亮
+
+    // 預設選中根目錄
+    if (treeData.value) {
+      selectedNode.value = treeData.value
+      currentProcessingNode.value = treeData.value.name
+    }
 
     // 在 Console 面板輸出樹狀結構
     const consoleRes = await filesystemApi.getConsoleOutput()
@@ -198,7 +306,7 @@ const loadTree = async () => {
       processedNodes.value = traverseLogs.value.length
     }
 
-    ElMessage.success('目錄樹載入成功')
+    if (showMessage) ElMessage.success('目錄樹載入成功')
   } catch (error) {
     console.error('載入目錄樹失敗:', error)
     ElMessage.error('載入目錄樹失敗')
@@ -403,49 +511,62 @@ const showCreateDialog = (type) => {
   createDialogVisible.value = true
 }
 
-// 建立項目
+// 建立項目（Command Pattern）
 const handleCreate = async (formData) => {
+  let createdId = null
+  const isDirectory = formData.type === 'directory'
+  const label = isDirectory ? `新增目錄「${formData.name}」` : `新增檔案「${formData.name}」`
+
   try {
-    if (formData.type === 'directory') {
-      await filesystemApi.createDirectory({
-        name: formData.name,
-        parentId: formData.parentId
-      })
-    } else {
-      // 根據檔案類型組裝對應的 DTO（Factory Pattern - 前端帶 $type discriminator）
-      const payload = {
-        $type: formData.fileType,  // "word" | "image" | "text"
-        name: formData.name,
-        size: formData.size,
-        parentId: formData.parentId
+    await executeCommand({
+      label,
+      execute: async () => {
+        let response
+        if (isDirectory) {
+          response = await filesystemApi.createDirectory({
+            name: formData.name,
+            parentId: formData.parentId
+          })
+        } else {
+          const payload = {
+            $type: formData.fileType,
+            name: formData.name,
+            size: formData.size,
+            parentId: formData.parentId
+          }
+          switch (formData.fileType) {
+            case 'word':
+              payload.pages = formData.pages
+              break
+            case 'image':
+              payload.width = formData.width
+              payload.height = formData.height
+              break
+            case 'text':
+              payload.encoding = formData.encoding
+              break
+          }
+          response = await filesystemApi.createFile(payload)
+        }
+        createdId = response.data.id
+        await reloadAndSelect(formData.parentId)
+      },
+      undo: async () => {
+        if (createdId) {
+          await filesystemApi.delete(createdId)
+          createdId = null
+          await reloadAndSelect(formData.parentId)
+        }
       }
-
-      // 依類型附加專屬屬性
-      switch (formData.fileType) {
-        case 'word':
-          payload.pages = formData.pages
-          break
-        case 'image':
-          payload.width = formData.width
-          payload.height = formData.height
-          break
-        case 'text':
-          payload.encoding = formData.encoding
-          break
-      }
-
-      await filesystemApi.createFile(payload)
-    }
-
+    })
     ElMessage.success('建立成功')
-    await loadTree()
   } catch (error) {
     console.error('建立失敗:', error)
     ElMessage.error('建立失敗')
   }
 }
 
-// 刪除節點
+// 刪除節點（Command Pattern）
 const deleteNode = async () => {
   if (!selectedNode.value) return
 
@@ -460,10 +581,74 @@ const deleteNode = async () => {
       }
     )
 
-    await filesystemApi.delete(selectedNode.value.id)
+    // 儲存被刪節點的完整資料以便 undo 重建
+    const deletedNode = JSON.parse(JSON.stringify(selectedNode.value))
+    const label = `刪除「${deletedNode.name}」`
+
+    // 遞迴收集節點及其子節點用於重建
+    const recreateNode = async (node, parentId) => {
+      let response
+      if (node.itemType === 'Directory') {
+        response = await filesystemApi.createDirectory({
+          name: node.name,
+          parentId
+        })
+        // 遞迴重建子項目
+        if (node.items && node.items.length > 0) {
+          for (const child of node.items) {
+            await recreateNode(child, response.data.id)
+          }
+        }
+      } else {
+        const payload = { name: node.name, size: node.size, parentId }
+        if (node.itemType === 'WordFile') {
+          payload.$type = 'word'
+          payload.pages = node.pages
+        } else if (node.itemType === 'ImageFile') {
+          payload.$type = 'image'
+          payload.width = node.width
+          payload.height = node.height
+        } else if (node.itemType === 'TextFile') {
+          payload.$type = 'text'
+          payload.encoding = node.encoding
+        }
+        response = await filesystemApi.createFile(payload)
+      }
+      // 重新掛回標籤
+      if (node.tags && node.tags.length > 0) {
+        for (const tag of node.tags) {
+          await filesystemApi.toggleTag(response.data.id, tag.id)
+        }
+      }
+      return response.data.id
+    }
+
+    // 找出被刪節點的 parentId
+    const findParentId = (root, targetId) => {
+      if (!root || !root.items) return null
+      for (const child of root.items) {
+        if (child.id === targetId) return root.id
+        const found = findParentId(child, targetId)
+        if (found) return found
+      }
+      return null
+    }
+    const parentId = findParentId(treeData.value, deletedNode.id) || treeData.value.id
+
+    await executeCommand({
+      label,
+      execute: async () => {
+        await filesystemApi.delete(deletedNode.id)
+        await reloadAndSelect(parentId)
+      },
+      undo: async () => {
+        const newId = await recreateNode(deletedNode, parentId)
+        // 更新 deletedNode.id 以便 redo 可以再次刪除正確的節點
+        deletedNode.id = newId
+        await reloadAndSelect(parentId)
+      }
+    })
     ElMessage.success('刪除成功')
-    selectedNode.value = null
-    await loadTree()
   } catch (error) {
     if (error !== 'cancel') {
       console.error('刪除失敗:', error)
@@ -472,10 +657,48 @@ const deleteNode = async () => {
   }
 }
 
+// Undo / Redo 操作
+const handleUndo = async () => {
+  try {
+    await undo()
+    ElMessage.success('已復原')
+  } catch (error) {
+    console.error('復原失敗:', error)
+    ElMessage.error('復原失敗')
+  }
+}
+
+const handleRedo = async () => {
+  try {
+    await redo()
+    ElMessage.success('已重做')
+  } catch (error) {
+    console.error('重做失敗:', error)
+    ElMessage.error('重做失敗')
+  }
+}
+
+// 鍵盤快捷鍵
+const handleKeyboard = (e) => {
+  const key = e.key.toLowerCase()
+  if ((e.ctrlKey || e.metaKey) && key === 'z' && !e.shiftKey) {
+    e.preventDefault()
+    handleUndo()
+  } else if ((e.ctrlKey || e.metaKey) && (key === 'y' || (key === 'z' && e.shiftKey))) {
+    e.preventDefault()
+    handleRedo()
+  }
+}
+
 // 初始化
 onMounted(() => {
   loadTags()
   loadTree()
+  document.addEventListener('keydown', handleKeyboard)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleKeyboard)
 })
 </script>
 
