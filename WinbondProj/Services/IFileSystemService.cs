@@ -8,11 +8,12 @@ public interface IFileSystemService
     // 查詢
     Task<FileSystemItemDto?> GetTreeAsync();
     Task<FileSystemItem?> GetByIdAsync(Guid id);
-    Task<double> GetTotalSizeAsync(Guid id);
     Task<SearchResultDto> SearchByExtensionAsync(string extension);
-    Task<TraverseLogDto> GetTraverseLogAsync(Guid id, string operation);
-    Task<string> GetXmlAsync(Guid id);
-    string GetConsoleOutput();
+    Task<string> GetConsoleOutputAsync();
+
+    // 基於已載入 item 的操作（避免重複查詢）
+    double GetTotalSize(FileSystemItem item);
+    TraverseLogDto GetTraverseLog(FileSystemItem item, string operation);
 
     // 建立
     Task<FileSystemItem> CreateDirectoryAsync(CreateDirectoryDto dto);

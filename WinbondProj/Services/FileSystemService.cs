@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using System.Text;
 using WinbondProj.Data;
 using WinbondProj.DTOs;
 using WinbondProj.Models;
@@ -20,68 +19,69 @@ public class FileSystemService : IFileSystemService
 
     public async Task<FileSystemItemDto?> GetTreeAsync()
     {
-        // 取得根目錄（ParentId 為 null）
-        var root = await _context.FileSystemItems
-            .Include(i => ((Directory)i).Items)
-            .FirstOrDefaultAsync(i => i.ParentId == null);
-
+        var root = await LoadSubtreeAsync(null);
         if (root == null) return null;
-
-        // 遞迴載入所有子項目
-        await LoadChildrenRecursiveAsync(root);
-
         return MapToDto(root);
     }
 
-    private async Task LoadChildrenRecursiveAsync(FileSystemItem item)
+    /// <summary>
+    /// 一次查詢載入子樹：避免 N+1 問題
+    /// 傳入 null 表示從根目錄開始；傳入 id 表示載入該節點及其所有後代
+    /// </summary>
+    private async Task<FileSystemItem?> LoadSubtreeAsync(Guid? id)
     {
-        // 載入標籤
-        await _context.Entry(item)
-            .Collection(i => i.Tags)
-            .LoadAsync();
+        // 1. 一次撈出所有項目（含 Tags），避免逐節點遞迴查詢
+        var allItems = await _context.FileSystemItems
+            .Include(i => i.Tags)
+            .AsNoTracking()
+            .ToListAsync();
 
+        // 2. 找到起點節點
+        FileSystemItem? root;
+        if (id == null)
+            root = allItems.FirstOrDefault(i => i.ParentId == null);
+        else
+            root = allItems.FirstOrDefault(i => i.Id == id);
+
+        if (root == null) return null;
+
+        // 3. 在記憶體中建立 parent-child 關係
+        var lookup = allItems.ToLookup(i => i.ParentId);
+        AssembleChildren(root, lookup);
+
+        return root;
+    }
+
+    private void AssembleChildren(FileSystemItem item, ILookup<Guid?, FileSystemItem> lookup)
+    {
         if (item is Directory directory)
         {
-            // 載入當前目錄的所有子項目
-            await _context.Entry(directory)
-                .Collection(d => d.Items)
-                .LoadAsync();
-
-            // 遞迴載入每個子項目
+            directory.Items = lookup[item.Id].ToList();
             foreach (var child in directory.Items)
             {
-                await LoadChildrenRecursiveAsync(child);
+                AssembleChildren(child, lookup);
             }
         }
     }
 
     public async Task<FileSystemItem?> GetByIdAsync(Guid id)
     {
-        var item = await _context.FileSystemItems.FindAsync(id);
-        if (item is Directory directory)
-        {
-            await LoadChildrenRecursiveAsync(directory);
-        }
-        return item;
+        return await LoadSubtreeAsync(id);
     }
 
-    public async Task<double> GetTotalSizeAsync(Guid id)
+    public double GetTotalSize(FileSystemItem item)
     {
-        var item = await GetByIdAsync(id);
-        return item?.GetTotalSize() ?? 0;
+        return item.GetTotalSize();
     }
 
     public async Task<SearchResultDto> SearchByExtensionAsync(string extension)
     {
-        var root = await _context.FileSystemItems
-            .FirstOrDefaultAsync(i => i.ParentId == null);
+        var root = await LoadSubtreeAsync(null);
 
         if (root == null)
         {
             return new SearchResultDto { Extension = extension };
         }
-
-        await LoadChildrenRecursiveAsync(root);
 
         var paths = root.SearchByExtension(extension);
         var files = root.SearchFilesByExtension(extension);
@@ -95,14 +95,8 @@ public class FileSystemService : IFileSystemService
         };
     }
 
-    public async Task<TraverseLogDto> GetTraverseLogAsync(Guid id, string operation)
+    public TraverseLogDto GetTraverseLog(FileSystemItem item, string operation)
     {
-        var item = await GetByIdAsync(id);
-        if (item == null)
-        {
-            return new TraverseLogDto { Operation = operation };
-        }
-
         var logs = new List<string>();
         item.Traverse(logs);
 
@@ -114,25 +108,10 @@ public class FileSystemService : IFileSystemService
         };
     }
 
-    public async Task<string> GetXmlAsync(Guid id)
+    public async Task<string> GetConsoleOutputAsync()
     {
-        var item = await GetByIdAsync(id);
-        if (item == null) return string.Empty;
-
-        var xml = item.ToXml();
-        return xml.ToString();
-    }
-
-    public string GetConsoleOutput()
-    {
-        var root = _context.FileSystemItems
-            .Include(i => ((Directory)i).Items)
-            .FirstOrDefault(i => i.ParentId == null);
-
+        var root = await LoadSubtreeAsync(null);
         if (root == null) return "無資料";
-
-        LoadChildrenRecursiveAsync(root).Wait();
-
         return root.Display();
     }
 
@@ -178,30 +157,29 @@ public class FileSystemService : IFileSystemService
 
     public async Task<bool> DeleteAsync(Guid id)
     {
-        var item = await GetByIdAsync(id);
-        if (item == null) return false;
+        // 刪除需要 tracked entities，用單次查詢取得所有後代的 ID
+        var allItems = await _context.FileSystemItems.ToListAsync();
+        var target = allItems.FirstOrDefault(i => i.Id == id);
+        if (target == null) return false;
 
-        // 如果是目錄，遞迴刪除所有子項目
-        if (item is Directory directory)
-        {
-            await DeleteChildrenRecursiveAsync(directory);
-        }
+        // 收集所有要刪除的 ID（含自身）
+        var idsToDelete = new HashSet<Guid> { id };
+        CollectDescendantIds(id, allItems.ToLookup(i => i.ParentId), idsToDelete);
 
-        _context.FileSystemItems.Remove(item);
+        // 一次移除所有（子項目先刪，父項目後刪）
+        var itemsToDelete = allItems.Where(i => idsToDelete.Contains(i.Id)).ToList();
+        _context.FileSystemItems.RemoveRange(itemsToDelete);
         await _context.SaveChangesAsync();
 
         return true;
     }
 
-    private async Task DeleteChildrenRecursiveAsync(Directory directory)
+    private void CollectDescendantIds(Guid parentId, ILookup<Guid?, FileSystemItem> lookup, HashSet<Guid> result)
     {
-        foreach (var child in directory.Items.ToList())
+        foreach (var child in lookup[parentId])
         {
-            if (child is Directory childDirectory)
-            {
-                await DeleteChildrenRecursiveAsync(childDirectory);
-            }
-            _context.FileSystemItems.Remove(child);
+            result.Add(child.Id);
+            CollectDescendantIds(child.Id, lookup, result);
         }
     }
 

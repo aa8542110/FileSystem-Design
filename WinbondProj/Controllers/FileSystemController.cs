@@ -57,8 +57,9 @@ public class FileSystemController : ControllerBase
             return NotFound($"找不到 ID 為 {id} 的項目");
         }
 
-        var totalSize = await _fileSystemService.GetTotalSizeAsync(id);
-        var log = await _fileSystemService.GetTraverseLogAsync(id, "CalculateSize");
+        // 只載入一次，直接對已載入的 item 執行計算與遍歷
+        var totalSize = _fileSystemService.GetTotalSize(item);
+        var log = _fileSystemService.GetTraverseLog(item, "CalculateSize");
 
         return Ok(new
         {
@@ -103,7 +104,7 @@ public class FileSystemController : ControllerBase
             return NotFound($"找不到 ID 為 {id} 的項目");
         }
 
-        var xml = await _fileSystemService.GetXmlAsync(id);
+        var xml = item.ToXml().ToString();
         return Content(xml, "application/xml");
     }
 
@@ -119,7 +120,7 @@ public class FileSystemController : ControllerBase
             return NotFound($"找不到 ID 為 {id} 的項目");
         }
 
-        var log = await _fileSystemService.GetTraverseLogAsync(id, operation);
+        var log = _fileSystemService.GetTraverseLog(item, operation);
         return Ok(log);
     }
 
@@ -127,9 +128,9 @@ public class FileSystemController : ControllerBase
     /// 取得 Console 輸出（樹狀結構）
     /// </summary>
     [HttpGet("console")]
-    public ActionResult<object> GetConsoleOutput()
+    public async Task<ActionResult<object>> GetConsoleOutput()
     {
-        var output = _fileSystemService.GetConsoleOutput();
+        var output = await _fileSystemService.GetConsoleOutputAsync();
         return Ok(new { Output = output });
     }
 
