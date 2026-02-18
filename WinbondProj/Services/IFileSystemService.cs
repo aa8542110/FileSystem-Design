@@ -11,9 +11,6 @@ public interface IFileSystemService
     Task<SearchResultDto> SearchByExtensionAsync(string extension);
     Task<string> GetConsoleOutputAsync();
 
-    // 基於已載入 item 的操作（避免重複查詢）
-    double GetTotalSize(FileSystemItem item);
-    TraverseLogDto GetTraverseLog(FileSystemItem item, string operation);
 
     // 建立
     Task<FileSystemItem> CreateDirectoryAsync(CreateDirectoryDto dto);

@@ -69,11 +69,6 @@ public class FileSystemService : IFileSystemService
         return await LoadSubtreeAsync(id);
     }
 
-    public double GetTotalSize(FileSystemItem item)
-    {
-        return item.GetTotalSize();
-    }
-
     public async Task<SearchResultDto> SearchByExtensionAsync(string extension)
     {
         var root = await LoadSubtreeAsync(null);
@@ -92,19 +87,6 @@ public class FileSystemService : IFileSystemService
             Paths = paths,
             FileIds = files.Select(f => f.Id).ToList(),
             Count = paths.Count
-        };
-    }
-
-    public TraverseLogDto GetTraverseLog(FileSystemItem item, string operation)
-    {
-        var logs = new List<string>();
-        item.Traverse(logs);
-
-        return new TraverseLogDto
-        {
-            Operation = operation,
-            Logs = logs,
-            Timestamp = DateTime.Now
         };
     }
 
