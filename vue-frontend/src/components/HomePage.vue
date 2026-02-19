@@ -182,9 +182,12 @@ const sortTreeNode = (node) => {
         case 'size':
           cmp = (a.size || 0) - (b.size || 0)
           break
-        case 'extension':
-          cmp = getExtension(a.name).localeCompare(getExtension(b.name))
+        case 'extension': {
+          const extA = (a.extension || '') !== '' ? a.extension : (a.itemType || '')
+          const extB = (b.extension || '') !== '' ? b.extension : (b.itemType || '')
+          cmp = extA.localeCompare(extB)
           break
+        }
       }
       return sortOrder.value === 'asc' ? cmp : -cmp
     })
